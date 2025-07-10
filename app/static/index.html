@@ -1,61 +1,250 @@
+<!DOCTYPE html>
 <html>
-    <head>
-        <title>QuickStart</title>
-        <script type="text/javascript" after defer>
-            // setup
-            function window_url() {
-                return window.location.protocol + '//' + window.location.hostname;
-            };
-            async function frontend_perm_load() {
-                var response = await fetch(window_url() + "/bag/v1.0/get/quickstart_frontend_perm_count");
-                if (response.status === 400) {
-                    return 0; // count not already stored, start from 0/unclicked
+<head>
+    <title>BlueROV2 Autonomous Mission Control</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background-color: #f5f5f5;
+        }
+        .container { 
+            max-width: 800px; 
+            margin: 0 auto; 
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .control-panel { 
+            background: #f8f9fa; 
+            padding: 20px; 
+            border-radius: 8px; 
+            margin: 20px 0; 
+            border: 1px solid #dee2e6;
+        }
+        .status-panel {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        button { 
+            padding: 12px 24px; 
+            margin: 8px; 
+            font-size: 16px; 
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-primary:hover { background: #0056b3; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-success:hover { background: #1e7e34; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn-danger:hover { background: #c82333; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-secondary:hover { background: #545b62; }
+        
+        input[type="number"], select { 
+            padding: 8px 12px; 
+            margin: 5px; 
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .form-group {
+            margin: 15px 0;
+        }
+        label {
+            display: inline-block;
+            width: 150px;
+            font-weight: bold;
+        }
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-connected { background: #28a745; }
+        .status-disconnected { background: #dc3545; }
+        .status-active { background: #ffc107; }
+        .log-container {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚁 BlueROV2 Autonomous Mission Control</h1>
+        
+        <div class="status-panel">
+            <h3>Vehicle Status</h3>
+            <p><span id="connection-indicator" class="status-indicator status-disconnected"></span>
+               Connection: <span id="connection-status">Disconnected</span></p>
+            <p><span id="mission-indicator" class="status-indicator status-disconnected"></span>
+               Mission: <span id="mission-status">Idle</span></p>
+            <p>Phase: <span id="mission-phase">-</span></p>
+            <p>Armed: <span id="armed-status">No</span></p>
+            
+            <button class="btn-secondary" onclick="connectVehicle()">Connect Vehicle</button>
+        </div>
+        
+        <div class="control-panel">
+            <h3>Mission Configuration</h3>
+            
+            <div class="form-group">
+                <label>Target Depth (m):</label>
+                <input type="number" id="target-depth" value="-2.0" step="0.1" min="-10" max="0">
+            </div>
+            
+            <div class="form-group">
+                <label>Duration (seconds):</label>
+                <input type="number" id="duration" value="30" min="10" max="300">
+            </div>
+            
+            <div class="form-group">
+                <label>Movement Pattern:</label>
+                <select id="movement-pattern">
+                    <option value="circular">Circular</option>
+                    <option value="hover">Hover Only</option>
+                </select>
+            </div>
+            
+            <div style="margin-top: 20px;">
+                <button class="btn-success" onclick="startMission()">🚀 Start Mission</button>
+                <button class="btn-danger" onclick="stopMission()">⏹️ Stop Mission</button>
+            </div>
+        </div>
+        
+        <div class="control-panel">
+            <h3>Mission Log</h3>
+            <div id="log-container" class="log-container"></div>
+        </div>
+    </div>
+
+    <script>
+        let missionActive = false;
+        
+        async function updateStatus() {
+            try {
+                const response = await fetch('/mission/status');
+                const status = await response.json();
+                
+                // Update connection status
+                const connIndicator = document.getElementById('connection-indicator');
+                const connStatus = document.getElementById('connection-status');
+                if (status.connected) {
+                    connIndicator.className = 'status-indicator status-connected';
+                    connStatus.textContent = 'Connected';
+                } else {
+                    connIndicator.className = 'status-indicator status-disconnected';
+                    connStatus.textContent = 'Disconnected';
                 }
-                return (await response.json())["value"];
+                
+                // Update mission status
+                const missionIndicator = document.getElementById('mission-indicator');
+                const missionStatus = document.getElementById('mission-status');
+                const missionPhase = document.getElementById('mission-phase');
+                
+                if (status.active) {
+                    missionIndicator.className = 'status-indicator status-active';
+                    missionStatus.textContent = 'Active';
+                    missionActive = true;
+                } else {
+                    missionIndicator.className = 'status-indicator status-disconnected';
+                    missionStatus.textContent = 'Idle';
+                    missionActive = false;
+                }
+                
+                missionPhase.textContent = status.phase || 'idle';
+                document.getElementById('armed-status').textContent = status.armed ? 'Yes' : 'No';
+                
+            } catch (error) {
+                addLog(`Error updating status: ${error.message}`);
+            }
+        }
+        
+        async function connectVehicle() {
+            try {
+                addLog('Attempting to connect to vehicle...');
+                const response = await fetch('/mission/connect', {method: 'POST'});
+                const result = await response.json();
+                addLog(`Connection result: ${result.status}`);
+                updateStatus();
+            } catch (error) {
+                addLog(`Connection error: ${error.message}`);
+            }
+        }
+        
+        async function startMission() {
+            if (missionActive) {
+                addLog('Mission already active!');
+                return;
+            }
+            
+            const config = {
+                target_depth: parseFloat(document.getElementById('target-depth').value),
+                duration: parseInt(document.getElementById('duration').value),
+                movement_pattern: document.getElementById('movement-pattern').value
             };
-
-            // callbacks
-            var frontend_count = 0;
-            function frontend_temp_click() {
-                frontend_count += 1;
-                document.getElementById("frontend_temp").textContent = frontend_count;
-            };
-            async function frontend_perm_click() {
-                var count = await frontend_perm_load();
-                count += 1;
-                fetch(window_url() + "/bag/v1.0/set/quickstart_frontend_perm_count", {
-                    method: "post",
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        value: count
-                    })
+            
+            try {
+                addLog(`Starting mission: depth=${config.target_depth}m, duration=${config.duration}s, pattern=${config.movement_pattern}`);
+                const response = await fetch('/mission/start', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(config)
                 });
-                document.getElementById("frontend_perm").textContent = count;
-            };
-            async function backend_temp_click() {
-                document.getElementById("backend_temp").textContent = (await (await fetch("/temp_count")).json())["value"];
-            };
-            async function backend_perm_click() {
-                document.getElementById("backend_perm").textContent = (await (await fetch("/persistent_count")).json())["value"];
-            };
-
-            // load frontend-triggered persistent state
-            document.getElementById("frontend_perm").textContent = frontend_perm_load();
-            // don't load backend-triggered persistent state, because doing so counts as a click
-        </script>
-    </head>
-    <body>
-        <h1>Quick Start Functionalities</h1>
-        <button type="button" onclick="frontend_temp_click()">Frontend Temporary</button>
-        <p>Clicks: <a id="frontend_temp">0</a></p>
-        <button type="button" onclick="frontend_perm_click()">Frontend Persistent</button>
-        <p>Clicks: <a id="frontend_perm">?</a></p>
-        <button type="button" onclick="backend_temp_click()">Backend Temporary</button>
-        <p>Clicks: <a id="backend_temp">0</a></p>
-        <button type="button" onclick="backend_perm_click()">Backend Persistent</button>
-        <p>Clicks: <a id="backend_perm">?</a></p>
-    </body>
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    addLog(`Mission started successfully: ${result.status}`);
+                } else {
+                    const error = await response.json();
+                    addLog(`Mission start failed: ${error.detail}`);
+                }
+            } catch (error) {
+                addLog(`Mission start error: ${error.message}`);
+            }
+        }
+        
+        async function stopMission() {
+            try {
+                addLog('Stopping mission...');
+                const response = await fetch('/mission/stop', {method: 'POST'});
+                const result = await response.json();
+                addLog(`Mission stopped: ${result.status}`);
+            } catch (error) {
+                addLog(`Stop mission error: ${error.message}`);
+            }
+        }
+        
+        function addLog(message) {
+            const logContainer = document.getElementById('log-container');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        // Update status every 2 seconds
+        setInterval(updateStatus, 2000);
+        updateStatus();
+        
+        // Initial log message
+        addLog('Mission control interface loaded');
+    </script>
+</body>
 </html>
