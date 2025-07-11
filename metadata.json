@@ -1,0 +1,14 @@
+{
+  "id": "quickstart-extension",
+  "name": "QuickStart Python Extension",
+  "description": "A simple BlueOS extension example with basic backend/frontend and ROV control",
+  "version": "0.1.0",
+  "company": "YourNameOrOrg",
+  "icon": "mdi-robot",
+  "webpage": "https://github.com/mohd-anas-ansari-666/blueos-extension",
+  "api": "",
+  "settings": {},
+  "docker": {
+    "image": "ghcr.io/mohd-anas-ansari-666/blueos-extension:latest"
+  }
+}
